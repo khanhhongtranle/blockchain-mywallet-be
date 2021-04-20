@@ -10,6 +10,7 @@ class Block:
         self.timestamp = timestamp
         self.previous_hash = previous_hash
         self.hash = self.compute_hash()
+        self.nonce = 0
 
     def compute_hash(self):
         sha256().update(str(self.index) + str(self.previous_hash) + str(self.timestamp) + str(self.transactions))
