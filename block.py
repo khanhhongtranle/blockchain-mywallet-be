@@ -1,12 +1,14 @@
 import hashlib
 
 class Block:
-    def __init__(self, index: int, previousHash: str, timestamp: int, data: str):
+    def __init__(self, index: int, previousHash: str, timestamp: int, data: str, difficulty: int, nonce: int):
         self.hash: str
         self.index = index
         self.previousHash = previousHash
         self.timestamp = timestamp
         self.data = data
+        self.difficulty = difficulty
+        self.nonce = nonce
         self.hash = self.calculateHash()
 
     def calculateHash(self,block=None):
@@ -27,3 +29,8 @@ class Block:
 
     def validateBlockStructure(self):
         return type(self.index) is int and type(self.hash) is str and type(self.previousHash) is str and type(self.timestamp) is int and type(self.data) is str
+
+    def findBlock(self, index: int, previousHash: str, timestamp: int, data: str, difficulty: int):
+        nonce = 0
+        while (True):
+            hash = self.calculateHash()
