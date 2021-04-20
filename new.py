@@ -13,7 +13,8 @@ class Block:
         self.nonce = 0
 
     def compute_hash(self):
-        sha256().update(str(self.index) + str(self.previous_hash) + str(self.timestamp) + str(self.transactions))
+        string = (str(self.index) + str(self.previous_hash) + str(self.timestamp) + str(self.transactions)).encode('utf-8')
+        sha256().update(string)
         return sha256().hexdigest()
 
     def is_valid_proof(self, block_hash, difficulty):
@@ -27,20 +28,32 @@ class BlockChain:
     difficulty = 2
 
     def __init__(self):
-        self.chain = []
+        self.__chain = []
         self.unconfirmed_transactions = []
         self.__create_genesis_block()
+
+    @property
+    def chain(self):
+        return self.__chain
+
+    @chain.setter
+    def chain(self, new_chain):
+        self.__chain = new_chain
+
+    @chain.getter
+    def chain(self):
+        return self.__chain
 
     def __create_genesis_block(self):
         genesis_block = Block(index=0, transactions=[], timestamp=time.time(), previous_hash="0")
         self.__append_to_chain(genesis_block)
 
     def __append_to_chain(self, new_block):
-        self.chain.append(new_block)
+        self.__chain.append(new_block)
 
     @property
     def last_block(self):
-        return self.chain[-1]
+        return self.__chain[-1]
 
     def proof_of_work(self, block):
         block.nonce = 0
