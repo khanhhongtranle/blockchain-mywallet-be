@@ -13,6 +13,7 @@ blockchain = BlockChain()
 # Chứa địa chỉ host của các thành viên tham gia khác của mạng
 peers = set()
 
+
 @app.route('/register_new_node', methods=['POST'])
 def register_new_peer():
     node_address = request.get_json(force=True)['node_address']
@@ -23,11 +24,12 @@ def register_new_peer():
 
     return get_chain()
 
+
 @app.route('/register_existing_node', methods=['POST'])
 def register_with_exixting_node():
     node_address = request.get_json(force=True)
     if not node_address:
-        return  "Invalid data", 400
+        return "Invalid data", 400
 
     data = {
         "node_address": request.host_url
@@ -61,6 +63,7 @@ def create_chain_from_dump(chain_dump):
         else:
             new_blockchain.chain = new_blockchain.chain.append(new_block)
         return new_blockchain
+
 
 @app.route('/chains', methods=['GET'])
 def get_chain():
@@ -100,3 +103,23 @@ def mine_unconfirmed_transactions():
 @app.route('/pending_tx')
 def get_pending_tx():
     return json.dumps(blockchain.unconfirmed_transactions)
+
+
+def consensus():
+    global blockchain
+    longest_chain = None
+    current_len = len(blockchain.chain)
+    for node in peers:
+        response = requests.get('{}/chain'.format(node))
+        length = response.json()['length']
+        chain = response.json()['chain']
+        if length > current_len and blockchain.check_chain_validity(chain=chain):
+            current_len = length
+            longest_chain = chain
+
+        if longest_chain:
+            blockchain = longest_chain
+            return True
+
+    return False
+

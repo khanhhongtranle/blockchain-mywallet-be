@@ -70,7 +70,7 @@ class BlockChain:
         if block.previous_hash != previous_hash:
             return False
 
-        if not block.is_valid_proof(block, proof):
+        if not block.is_valid_proof(block_hash=block.hash, difficulty=self.difficulty):
             return False
 
         block.hash = proof
@@ -96,5 +96,24 @@ class BlockChain:
             return new_block.index
 
         return -1 #mining false
+
+    def check_chain_validity(self, chain):
+        result = True
+        previous_hash = "0"
+        for block in chain:
+            block_hash = block.hash
+            delattr(block, "hash")
+            if not block.is_valid_proof(block_hash=block_hash, difficulty=self.difficulty) or previous_hash != block.previous_hash:
+                result = False
+                break
+
+            block.hash = block_hash
+            previous_hash = block_hash
+
+        return result
+
+
+
+
 
 
