@@ -97,6 +97,11 @@ def mine_unconfirmed_transactions():
     result = blockchain.mine()
     if not result:
         return "No transaction to mine"
+    else:
+        chain_length = len(blockchain.chain)
+        consensus()
+        if chain_length == len(blockchain.chain):
+            announce_new_block(block=blockchain.last_block)
     return "Block #{} is mined".format(result)
 
 
@@ -123,3 +128,20 @@ def consensus():
 
     return False
 
+
+@app.route('/add_block', methods=['POST'])
+def verify_and_add_block():
+    block_data = request.get_json(force=True)
+    block = Block(index=block_data['index'],transactions=block_data['transactions'], timestamp=block_data['timestamp'],previous_hash=block_data['previous_hash'])
+    proof = block_data['hash']
+    added = blockchain.add_block_to_blockchain(block=block, proof=proof)
+    if not added:
+        return "The block was discarded by the node", 400
+
+    return "The block added to the chain", 201
+
+
+def announce_new_block(block):
+    for node in peers:
+        url = "{}add_block".format(peers)
+        requests.post(url, data=json.dumps(block.__dict__, sort_keys=True))
