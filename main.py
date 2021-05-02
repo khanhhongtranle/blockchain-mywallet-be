@@ -65,17 +65,19 @@ def access_my_wallet():
 @app.route('/create_new_wallet', methods=['POST'])
 def create_new_wallet():
     request_data = request.get_json(force=True)
-    print(request_data)
     req_password = request_data['password']
     # Generate private & public key
     rsa_key = generate_ecdsa_key()
     private_key = rsa_key['private_key']
-    print(private_key)
     public_key = rsa_key['public_key']
-    print(public_key)
     # Save to db
     write_wallet_into_db(password=req_password, private_key=private_key, public_key=public_key)
-    return "Success", 201
+    response_body = {
+        'message': 'Success',
+        'private_key': private_key
+    }
+    print(json.dumps(response_body))
+    return json.dumps(response_body), 201
 
 
 blockchain = BlockChain()
