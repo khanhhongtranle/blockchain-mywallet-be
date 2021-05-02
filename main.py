@@ -1,17 +1,27 @@
 import time
-
 from new import Block
 from new import BlockChain
 from flask import Flask, request
 import requests
 import json
+from flask_pymongo import PyMongo
 
 app = Flask(__name__)
+app.config["MONGO_URI"] = "mongodb://localhost:27017/myDatabase"
+mongo = PyMongo(app)
+
 
 blockchain = BlockChain()
 
 # Chứa địa chỉ host của các thành viên tham gia khác của mạng
 peers = set()
+
+
+@app.after_request
+def apply_caching(response):
+    response.headers["Access-Control-Allow-Origin"] = "*"
+    response.headers["Access-Control-Allow-Headers"] = "Content-Type"
+    return response
 
 
 @app.route('/register_new_node', methods=['POST'])
@@ -132,7 +142,7 @@ def consensus():
 @app.route('/add_block', methods=['POST'])
 def verify_and_add_block():
     block_data = request.get_json(force=True)
-    block = Block(index=block_data['index'],transactions=block_data['transactions'], timestamp=block_data['timestamp'],previous_hash=block_data['previous_hash'])
+    block = Block(index=block_data['index'], transactions=block_data['transactions'], timestamp=block_data['timestamp'], previous_hash=block_data['previous_hash'])
     proof = block_data['hash']
     added = blockchain.add_block_to_blockchain(block=block, proof=proof)
     if not added:
@@ -145,3 +155,10 @@ def announce_new_block(block):
     for node in peers:
         url = "{}add_block".format(peers)
         requests.post(url, data=json.dumps(block.__dict__, sort_keys=True))
+
+
+# login and generate private key
+@app.route('/access_my_wallet', methods=['POST'])
+def access_my_wallet():
+    requestData = request.get_json(force=True)
+    return "Access successful", 201
