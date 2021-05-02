@@ -1,3 +1,4 @@
+import base64
 import time
 from new import Block
 from new import BlockChain
@@ -5,10 +6,76 @@ from flask import Flask, request
 import requests
 import json
 from flask_pymongo import PyMongo
+import os
+import hashlib
+import ecdsa
+
+salt = os.urandom(32)  # Salt for hash password to write into db
 
 app = Flask(__name__)
 app.config["MONGO_URI"] = "mongodb://localhost:27017/myDatabase"
 mongo = PyMongo(app)
+db = mongo.db
+
+
+# Hash password
+def hash_password(password):
+    # Hash password
+    key = hashlib.pbkdf2_hmac(
+        'sha256',  # The hash digest algorithm for HMAC
+        password.encode('utf-8'),  # Convert the password to bytes
+        salt,  # Provide the salt
+        100000  # It is recommended to use at least 100,000 iterations of SHA-256
+    )
+    return key.hex()
+
+
+# Generate private key & public key by ECDSA key
+def generate_ecdsa_key():
+    sk = ecdsa.SigningKey.generate(curve=ecdsa.SECP256k1)  # this is your sign (private key)
+    private_key = sk.to_string().hex()  # convert your private key to hex
+    vk = sk.get_verifying_key()  # this is your verification key (public key)
+    public_key = vk.to_string().hex()
+    # we are going to encode the public key to make it shorter
+    public_key = base64.b64encode(bytes.fromhex(public_key)).hex()
+
+    return {
+        'private_key': private_key,
+        'public_key': public_key
+    }
+
+
+# Database MongoDb
+def write_wallet_into_db(password, private_key, public_key):
+    db.wallet.insert_one({
+        'password': hash_password(password=password),
+        'private_key': private_key,
+        'public_key': public_key
+    })
+
+
+# Access to wallet
+@app.route('/access_my_wallet', methods=['POST'])
+def access_my_wallet():
+    requestData = request.get_json(force=True)
+    return "Access successful", 201
+
+
+# Create new wallet
+@app.route('/create_new_wallet', methods=['POST'])
+def create_new_wallet():
+    request_data = request.get_json(force=True)
+    print(request_data)
+    req_password = request_data['password']
+    # Generate private & public key
+    rsa_key = generate_ecdsa_key()
+    private_key = rsa_key['private_key']
+    print(private_key)
+    public_key = rsa_key['public_key']
+    print(public_key)
+    # Save to db
+    write_wallet_into_db(password=req_password, private_key=private_key, public_key=public_key)
+    return "Success", 201
 
 
 blockchain = BlockChain()
@@ -155,10 +222,3 @@ def announce_new_block(block):
     for node in peers:
         url = "{}add_block".format(peers)
         requests.post(url, data=json.dumps(block.__dict__, sort_keys=True))
-
-
-# login and generate private key
-@app.route('/access_my_wallet', methods=['POST'])
-def access_my_wallet():
-    requestData = request.get_json(force=True)
-    return "Access successful", 201
