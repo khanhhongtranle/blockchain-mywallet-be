@@ -1,7 +1,50 @@
-import json
 import time
 from hashlib import sha256
 
+class InputTransaction:
+    def __init__(self, receiver_address, sender_address, amount):
+        self.receiver_address = receiver_address
+        self.sender_address = sender_address
+        self.amount = amount
+
+    def get_sender_address(self):
+        return self.sender_address
+
+    def get_receiver_address(self):
+        return self.receiver_address
+
+    def get_amount(self):
+        return self.amount
+
+class OutputTransaction:
+    def __init__(self, sender_address, receiver_address, amount):
+        self.sender_address = sender_address
+        self.receiver_address = receiver_address
+        self.amount = amount
+
+    def get_sender_address(self):
+        return self.sender_address
+
+    def get_receiver_address(self):
+        return self.receiver_address
+
+    def get_amount(self):
+        return self.amount
+
+class Transaction:
+    def __init__(self, id, input_transaction: InputTransaction, output_transaction: OutputTransaction):
+        self.id = id
+        self.input_transaction = input_transaction
+        self.output_transaction = output_transaction
+
+    def get_transaction_id(self):
+        return self.id
+
+    def get_in_transaction(self):
+        return self.input_transaction
+
+    def get_out_transaction(self):
+        return self.output_transaction
 
 class Block:
     def __init__(self, index, transactions, timestamp, previous_hash):
@@ -23,13 +66,12 @@ class Block:
             result = True
         return result
 
-
 class BlockChain:
     difficulty = 2
 
     def __init__(self):
-        self.__chain = []
-        self.unconfirmed_transactions = []
+        self.__chain = []  # keeps all blocks
+        self.unconfirmed_transactions = []  # keeps all unconfirmned transactions
         self.__create_genesis_block()
 
     @property
@@ -95,7 +137,7 @@ class BlockChain:
             self.unconfirmed_transactions = []
             return new_block.index
 
-        return -1 #mining false
+        return -1  # mining false
 
     def check_chain_validity(self, chain):
         result = True
@@ -111,9 +153,4 @@ class BlockChain:
             previous_hash = block_hash
 
         return result
-
-
-
-
-
 

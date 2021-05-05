@@ -55,6 +55,26 @@ def write_wallet_into_db(password, private_key, public_key):
     })
 
 
+# Check jwt token
+def check_jwt_token(headers):
+    jwt_header = headers.get('Authorization')
+    jwt_token = jwt_header.replace('JWT ', '')
+    decode = jwt.decode(jwt_token, 'secret', algorithms=['HS256'])
+    private_key = decode['private_key']
+    public_key = decode['public_key']
+    found_wallet_data = db.wallet.find_one({'$and': [{'private_key': private_key}, {'public_key': public_key}]})
+    if found_wallet_data:
+        return True
+    return False
+
+# test jwt token
+@app.route('/test', methods=['GET'])
+def test():
+    headers=request.headers
+    print(check_jwt_token(headers=headers))
+    return "ok", 201
+
+
 # Access to wallet
 @app.route('/access_my_wallet', methods=['POST'])
 def access_my_wallet():
@@ -69,8 +89,8 @@ def access_my_wallet():
             'public_key': found_wallet_data['public_key'],
             'private_key': found_wallet_data['private_key']
         },
-        'secret',
-        algorithm='HS256')
+            'secret',
+            algorithm='HS256')
         response_body = {
             'message': 'Success',
             'data': {
@@ -109,6 +129,7 @@ def create_new_wallet():
     return json.dumps(response_body), 201
 
 
+# Block chain
 blockchain = BlockChain()
 
 # Chứa địa chỉ host của các thành viên tham gia khác của mạng
