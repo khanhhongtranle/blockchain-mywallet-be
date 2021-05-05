@@ -9,6 +9,7 @@ from flask_pymongo import PyMongo
 import os
 import hashlib
 import ecdsa
+import jwt
 
 salt = os.urandom(32)  # Salt for hash password to write into db
 
@@ -57,8 +58,35 @@ def write_wallet_into_db(password, private_key, public_key):
 # Access to wallet
 @app.route('/access_my_wallet', methods=['POST'])
 def access_my_wallet():
-    requestData = request.get_json(force=True)
-    return "Access successful", 201
+    request_data = request.get_json(force=True)
+    req_password = request_data['password']
+    req_private_key = request_data['private_key']
+    hashed_password = hash_password(password=req_password)
+    found_wallet_data = db.wallet.find_one({'$and': [{'private_key': req_private_key}, {'password': hashed_password}]})
+    if found_wallet_data:
+        # Create jwt token by HS256
+        encode_token = jwt.encode({
+            'public_key': found_wallet_data['public_key'],
+            'private_key': found_wallet_data['private_key']
+        },
+        'secret',
+        algorithm='HS256')
+        response_body = {
+            'message': 'Success',
+            'data': {
+                'public_key': found_wallet_data['public_key'],
+                'jwt_token': encode_token
+            }
+        }
+        return json.dumps(response_body), 201
+    else:
+        response_body = {
+            'message': 'Failed',
+            'data': {
+
+            }
+        }
+        return json.dumps(response_body), 400
 
 
 # Create new wallet
@@ -74,9 +102,10 @@ def create_new_wallet():
     write_wallet_into_db(password=req_password, private_key=private_key, public_key=public_key)
     response_body = {
         'message': 'Success',
-        'private_key': private_key
+        'data': {
+            'private_key': private_key
+        }
     }
-    print(json.dumps(response_body))
     return json.dumps(response_body), 201
 
 
