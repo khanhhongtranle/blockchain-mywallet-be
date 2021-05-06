@@ -14,7 +14,7 @@ db = client.myDatabase
 
 
 # Hash password
-def hash_password(password):
+def hash_password(password, salt):
     # Hash password
     key = hashlib.pbkdf2_hmac(
         'sha256',  # The hash digest algorithm for HMAC
@@ -43,9 +43,10 @@ def generate_ecdsa_key():
 # Database MongoDb
 def write_wallet_into_db(password, private_key, public_key):
     db.wallet.insert_one({
-        'password': hash_password(password=password),
+        'password': hash_password(password=password, salt=salt),
         'private_key': private_key,
-        'public_key': public_key
+        'public_key': public_key,
+        'salt': salt
     })
 
 
@@ -61,44 +62,12 @@ def check_jwt_token(headers):
         return True
     return False
 
-
-# @app.after_request
-# def apply_caching(response):
-#     # response.headers["Access-Control-Allow-Origin"] = "*"
-#     # response.headers["Access-Control-Allow-Headers"] = "Access-Control-Allow-Headers, Origin,Accept, X-Requested-With, Content-Type, Access-Control-Request-Method, Access-Control-Request-Headers,Authorization"
-#     # response.headers['Access-Control-Allow-Methods'] = 'GET,PUT,POST,DELETE'
-#     origin = request.headers.get('Origin')
-#     if request.method == 'OPTIONS':
-#         response = make_response()
-#         response.headers.add('Access-Control-Allow-Credentials', 'true')
-#         response.headers.add('Access-Control-Allow-Headers', 'Content-Type')
-#         response.headers.add('Access-Control-Allow-Headers', 'x-csrf-token')
-#         response.headers.add('Access-Control-Allow-Headers', 'Authorization')
-#         response.headers.add('Access-Control-Allow-Methods',
-#                              'GET, POST, OPTIONS, PUT, PATCH, DELETE')
-#         if origin:
-#             response.headers.add('Access-Control-Allow-Origin', origin)
-#     else:
-#         response.headers.add('Access-Control-Allow-Credentials', 'true')
-#         if origin:
-#             response.headers.add('Access-Control-Allow-Origin', origin)
-#
-#     return response
-
-# test jwt token
-# @app.route('/test', methods=['GET'])
-# def test():
-#     headers = request.headers
-#     print(check_jwt_token(headers=headers))
-#     return "ok", 201
-
-
 # Access to wallet
 def access_my_wallet(req):
     request_data = json.loads(req.body.decode('utf-8'))
     req_password = str(request_data['password'])
     req_private_key = str(request_data['private_key'])
-    hashed_password = hash_password(password=req_password)
+    hashed_password = hash_password(password=req_password, salt=salt)
     found_wallet_data = db.wallet.find_one({'$and': [{'private_key': req_private_key}, {'password': hashed_password}]})
     if found_wallet_data:
         # Create jwt token by HS256
