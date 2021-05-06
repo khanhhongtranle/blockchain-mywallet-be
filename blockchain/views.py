@@ -252,7 +252,7 @@ def verify_and_add_block(req):
         print('You do not have access')
         return HttpResponse("You do not have access", status=404)
 
-    transaction_data = req.POST
+    transaction_data = json.loads(req.body.decode('utf-8'))
     required_fields = ['in', 'out']
 
     for field in required_fields:
