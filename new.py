@@ -1,5 +1,6 @@
 import time
 from hashlib import sha256
+import uuid
 
 class InputTransaction:
     def __init__(self, receiver_address, sender_address, amount):
@@ -120,7 +121,10 @@ class BlockChain:
         self.__append_to_chain(block)
         return True
 
-    def add_new_transaction(self, transaction):
+    def add_new_transaction(self, transaction_dumps):
+        in_transaction = InputTransaction(receiver_address=transaction_dumps['in']['receiver_address'], sender_address=transaction_dumps['in']['sender_address'], amount=transaction_dumps['in']['amount'])
+        out_transaction = OutputTransaction(sender_address=transaction_dumps['out']['sender_address'], receiver_address=transaction_dumps['out']['receiver_address'], amount=transaction_dumps['out']['amount'])
+        transaction = Transaction(id=uuid.uuid4(), input_transaction=in_transaction, output_transaction=out_transaction)
         self.unconfirmed_transactions.append(transaction)
 
     def mine(self):
@@ -129,7 +133,7 @@ class BlockChain:
 
         last_block = self.last_block
 
-        new_block = Block(index=last_block.index + 1, transactions=self.unconfirmed_transactions, timestamp=time.time(), previous_hash=last_block.previous_hash)
+        new_block = Block(index=last_block.index + 1, transactions=self.unconfirmed_transactions, timestamp=time.time(), previous_hash=last_block.hash)
 
         proof = self.proof_of_work(new_block)
 

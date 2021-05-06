@@ -1,8 +1,10 @@
 import base64
 import time
-from new import Block
+import uuid
+
+from new import Block, InputTransaction, OutputTransaction, Transaction
 from new import BlockChain
-from flask import Flask, request
+from flask import Flask, request, make_response
 import requests
 import json
 from flask_pymongo import PyMongo
@@ -10,10 +12,17 @@ import os
 import hashlib
 import ecdsa
 import jwt
+from flask_cors import CORS
 
 salt = os.urandom(32)  # Salt for hash password to write into db
 
 app = Flask(__name__)
+CORS(app)
+cors = CORS(app, resource={
+    r"/*":{
+        "origins":"*"
+    }
+})
 app.config["MONGO_URI"] = "mongodb://localhost:27017/myDatabase"
 mongo = PyMongo(app)
 db = mongo.db
@@ -67,10 +76,33 @@ def check_jwt_token(headers):
         return True
     return False
 
+@app.after_request
+def apply_caching(response):
+    # response.headers["Access-Control-Allow-Origin"] = "*"
+    # response.headers["Access-Control-Allow-Headers"] = "Access-Control-Allow-Headers, Origin,Accept, X-Requested-With, Content-Type, Access-Control-Request-Method, Access-Control-Request-Headers,Authorization"
+    # response.headers['Access-Control-Allow-Methods'] = 'GET,PUT,POST,DELETE'
+    origin = request.headers.get('Origin')
+    if request.method == 'OPTIONS':
+        response = make_response()
+        response.headers.add('Access-Control-Allow-Credentials', 'true')
+        response.headers.add('Access-Control-Allow-Headers', 'Content-Type')
+        response.headers.add('Access-Control-Allow-Headers', 'x-csrf-token')
+        response.headers.add('Access-Control-Allow-Headers', 'Authorization')
+        response.headers.add('Access-Control-Allow-Methods',
+                             'GET, POST, OPTIONS, PUT, PATCH, DELETE')
+        if origin:
+            response.headers.add('Access-Control-Allow-Origin', origin)
+    else:
+        response.headers.add('Access-Control-Allow-Credentials', 'true')
+        if origin:
+            response.headers.add('Access-Control-Allow-Origin', origin)
+
+    return response
+
 # test jwt token
 @app.route('/test', methods=['GET'])
 def test():
-    headers=request.headers
+    headers = request.headers
     print(check_jwt_token(headers=headers))
     return "ok", 201
 
@@ -106,7 +138,7 @@ def access_my_wallet():
 
             }
         }
-        return json.dumps(response_body), 400
+        return json.dumps(response_body), 200
 
 
 # Create new wallet
@@ -136,13 +168,6 @@ blockchain = BlockChain()
 peers = set()
 
 
-@app.after_request
-def apply_caching(response):
-    response.headers["Access-Control-Allow-Origin"] = "*"
-    response.headers["Access-Control-Allow-Headers"] = "Content-Type"
-    return response
-
-
 @app.route('/register_new_node', methods=['POST'])
 def register_new_peer():
     node_address = request.get_json(force=True)['node_address']
@@ -167,7 +192,7 @@ def register_with_exixting_node():
         "Content-Type": "application/json"
     }
 
-    response = requests.post(node_address + "/register_node", data=json.dumps(data), headers=headers)
+    response = requests.post(node_address + "/register_new_node", data=json.dumps(data), headers=headers)
 
     if response.status_code == 200:
         global blockchain
@@ -175,7 +200,7 @@ def register_with_exixting_node():
         chain_dump = response.json()['chain']
         blockchain = create_chain_from_dump(chain_dump)
         peers.update(response.json()['peers'])
-        return "Registration successful", 200
+        return "Registration successful", 201
     else:
         return response.content, response.status_code
 
@@ -196,6 +221,9 @@ def create_chain_from_dump(chain_dump):
 
 @app.route('/chains', methods=['GET'])
 def get_chain():
+    headers = request.headers
+    if check_jwt_token(headers=headers):
+        return "You do not have access", 404
     chain_data = []
     for block in blockchain.chain:
         chain_data.append(block.__dict__)
@@ -207,14 +235,18 @@ def get_chain():
 
 @app.route('/new_transaction', methods=['POST'])
 def new_transaction():
+    headers = request.headers
+    if check_jwt_token(headers=headers):
+        return "You do not have access", 404
+
     data = request.get_json(force=True)
-    required_fields = ['author', 'content']
+    required_fields = ['in', 'out']
 
     for field in required_fields:
         if not data.get(field):
             return "Invalid transaction data", 404
 
-    data['timestamp'] = time.time()
+    # data['timestamp'] = time.time()
 
     blockchain.add_new_transaction(data)
 
@@ -258,14 +290,34 @@ def consensus():
     return False
 
 
+# add block not passed add to unconfirmed transaction step
 @app.route('/add_block', methods=['POST'])
 def verify_and_add_block():
-    block_data = request.get_json(force=True)
-    block = Block(index=block_data['index'], transactions=block_data['transactions'], timestamp=block_data['timestamp'], previous_hash=block_data['previous_hash'])
-    proof = block_data['hash']
+    headers = request.headers
+    if not check_jwt_token(headers=headers):
+        print('You do not have access')
+        return "You do not have access", 404
+
+    transaction_data = request.get_json(force=True)
+    required_fields = ['in', 'out']
+
+    for field in required_fields:
+        if not transaction_data.get(field):
+            print('Invalid transaction data')
+            return "Invalid transaction data", 404
+
+    the_last_block = blockchain.last_block
+    transactions = []
+    in_transaction = InputTransaction(receiver_address=transaction_data['in']['receiver_address'], sender_address=transaction_data['in']['sender_address'], amount=transaction_data['in']['amount'])
+    out_transaction = OutputTransaction(sender_address=transaction_data['out']['sender_address'], receiver_address=transaction_data['out']['receiver_address'], amount=transaction_data['out']['amount'])
+    transaction = Transaction(id=uuid.uuid4(), input_transaction=in_transaction, output_transaction=out_transaction)
+    transactions.append(transaction)
+    block = Block(index=the_last_block.index + 1, transactions=transactions, timestamp=time.time(), previous_hash=the_last_block.hash)
+    proof = blockchain.proof_of_work(block)
     added = blockchain.add_block_to_blockchain(block=block, proof=proof)
     if not added:
-        return "The block was discarded by the node", 400
+        print('The block was discarded by the node')
+        return "The block was discarded by the node", 404
 
     return "The block added to the chain", 201
 
