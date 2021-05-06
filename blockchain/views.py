@@ -1,31 +1,16 @@
+from django.http import HttpResponse
+
 import base64
 import time
 import uuid
 
-from new import Block, InputTransaction, OutputTransaction, Transaction
-from new import BlockChain
-from flask import Flask, request, make_response
-import requests
-import json
-from flask_pymongo import PyMongo
-import os
-import hashlib
-import ecdsa
-import jwt
-from flask_cors import CORS
+from .blockchain import Block, InputTransaction, OutputTransaction, Transaction, BlockChain
+import json, pymongo, os, hashlib, ecdsa, jwt, requests
 
 salt = os.urandom(32)  # Salt for hash password to write into db
 
-app = Flask(__name__)
-CORS(app)
-cors = CORS(app, resource={
-    r"/*":{
-        "origins":"*"
-    }
-})
-app.config["MONGO_URI"] = "mongodb://localhost:27017/myDatabase"
-mongo = PyMongo(app)
-db = mongo.db
+client = pymongo.MongoClient("localhost", 27017)
+db = client.myDatabase
 
 
 # Hash password
@@ -76,43 +61,43 @@ def check_jwt_token(headers):
         return True
     return False
 
-@app.after_request
-def apply_caching(response):
-    # response.headers["Access-Control-Allow-Origin"] = "*"
-    # response.headers["Access-Control-Allow-Headers"] = "Access-Control-Allow-Headers, Origin,Accept, X-Requested-With, Content-Type, Access-Control-Request-Method, Access-Control-Request-Headers,Authorization"
-    # response.headers['Access-Control-Allow-Methods'] = 'GET,PUT,POST,DELETE'
-    origin = request.headers.get('Origin')
-    if request.method == 'OPTIONS':
-        response = make_response()
-        response.headers.add('Access-Control-Allow-Credentials', 'true')
-        response.headers.add('Access-Control-Allow-Headers', 'Content-Type')
-        response.headers.add('Access-Control-Allow-Headers', 'x-csrf-token')
-        response.headers.add('Access-Control-Allow-Headers', 'Authorization')
-        response.headers.add('Access-Control-Allow-Methods',
-                             'GET, POST, OPTIONS, PUT, PATCH, DELETE')
-        if origin:
-            response.headers.add('Access-Control-Allow-Origin', origin)
-    else:
-        response.headers.add('Access-Control-Allow-Credentials', 'true')
-        if origin:
-            response.headers.add('Access-Control-Allow-Origin', origin)
 
-    return response
+# @app.after_request
+# def apply_caching(response):
+#     # response.headers["Access-Control-Allow-Origin"] = "*"
+#     # response.headers["Access-Control-Allow-Headers"] = "Access-Control-Allow-Headers, Origin,Accept, X-Requested-With, Content-Type, Access-Control-Request-Method, Access-Control-Request-Headers,Authorization"
+#     # response.headers['Access-Control-Allow-Methods'] = 'GET,PUT,POST,DELETE'
+#     origin = request.headers.get('Origin')
+#     if request.method == 'OPTIONS':
+#         response = make_response()
+#         response.headers.add('Access-Control-Allow-Credentials', 'true')
+#         response.headers.add('Access-Control-Allow-Headers', 'Content-Type')
+#         response.headers.add('Access-Control-Allow-Headers', 'x-csrf-token')
+#         response.headers.add('Access-Control-Allow-Headers', 'Authorization')
+#         response.headers.add('Access-Control-Allow-Methods',
+#                              'GET, POST, OPTIONS, PUT, PATCH, DELETE')
+#         if origin:
+#             response.headers.add('Access-Control-Allow-Origin', origin)
+#     else:
+#         response.headers.add('Access-Control-Allow-Credentials', 'true')
+#         if origin:
+#             response.headers.add('Access-Control-Allow-Origin', origin)
+#
+#     return response
 
 # test jwt token
-@app.route('/test', methods=['GET'])
-def test():
-    headers = request.headers
-    print(check_jwt_token(headers=headers))
-    return "ok", 201
+# @app.route('/test', methods=['GET'])
+# def test():
+#     headers = request.headers
+#     print(check_jwt_token(headers=headers))
+#     return "ok", 201
 
 
 # Access to wallet
-@app.route('/access_my_wallet', methods=['POST'])
-def access_my_wallet():
-    request_data = request.get_json(force=True)
-    req_password = request_data['password']
-    req_private_key = request_data['private_key']
+def access_my_wallet(req):
+    request_data = json.loads(req.body.decode('utf-8'))
+    req_password = str(request_data['password'])
+    req_private_key = str(request_data['private_key'])
     hashed_password = hash_password(password=req_password)
     found_wallet_data = db.wallet.find_one({'$and': [{'private_key': req_private_key}, {'password': hashed_password}]})
     if found_wallet_data:
@@ -130,7 +115,7 @@ def access_my_wallet():
                 'jwt_token': encode_token
             }
         }
-        return json.dumps(response_body), 201
+        return HttpResponse(json.dumps(response_body), status=201)
     else:
         response_body = {
             'message': 'Failed',
@@ -138,13 +123,13 @@ def access_my_wallet():
 
             }
         }
-        return json.dumps(response_body), 200
+        return HttpResponse(json.dumps(response_body), status=200)
 
 
 # Create new wallet
-@app.route('/create_new_wallet', methods=['POST'])
-def create_new_wallet():
-    request_data = request.get_json(force=True)
+# @app.route('/create_new_wallet', methods=['POST'])
+def create_new_wallet(req):
+    request_data = json.loads(req.body.decode('utf-8'))
     req_password = request_data['password']
     # Generate private & public key
     rsa_key = generate_ecdsa_key()
@@ -158,7 +143,7 @@ def create_new_wallet():
             'private_key': private_key
         }
     }
-    return json.dumps(response_body), 201
+    return HttpResponse(json.dumps(response_body), status=201)
 
 
 # Block chain
@@ -168,25 +153,25 @@ blockchain = BlockChain()
 peers = set()
 
 
-@app.route('/register_new_node', methods=['POST'])
-def register_new_peer():
-    node_address = request.get_json(force=True)['node_address']
+# @app.route('/register_new_node', methods=['POST'])
+def register_new_peer(req):
+    node_address = req.POST['node_address']
     if not node_address:
-        return "Invalid data", 400
+        return HttpResponse("Invalid data", status=400)
 
     peers.add(node_address)
 
     return get_chain()
 
 
-@app.route('/register_existing_node', methods=['POST'])
-def register_with_exixting_node():
-    node_address = request.get_json(force=True)
+# @app.route('/register_existing_node', methods=['POST'])
+def register_with_exixting_node(req):
+    node_address = req.POST
     if not node_address:
-        return "Invalid data", 400
+        return HttpResponse("Invalid data", status=400)
 
     data = {
-        "node_address": request.host_url
+        "node_address": '127.0.0.1'  # tam thoi
     }
     headers = {
         "Content-Type": "application/json"
@@ -200,9 +185,9 @@ def register_with_exixting_node():
         chain_dump = response.json()['chain']
         blockchain = create_chain_from_dump(chain_dump)
         peers.update(response.json()['peers'])
-        return "Registration successful", 201
+        return HttpResponse("Registration successful", status=201)
     else:
-        return response.content, response.status_code
+        return HttpResponse(response.content, status=response.status_code)
 
 
 def create_chain_from_dump(chain_dump):
@@ -219,56 +204,56 @@ def create_chain_from_dump(chain_dump):
         return new_blockchain
 
 
-@app.route('/chains', methods=['GET'])
-def get_chain():
-    headers = request.headers
+# @app.route('/chains', methods=['GET'])
+def get_chain(req):
+    headers = req.headers
     if check_jwt_token(headers=headers):
-        return "You do not have access", 404
+        return HttpResponse("You do not have access", status=404)
     chain_data = []
     for block in blockchain.chain:
         chain_data.append(block.__dict__)
-    return json.dumps({
+    return HttpResponse(json.dumps({
         'length': len(chain_data),
         'chain': chain_data
-    })
+    }))
 
 
-@app.route('/new_transaction', methods=['POST'])
-def new_transaction():
-    headers = request.headers
+# @app.route('/new_transaction', methods=['POST'])
+def new_transaction(req):
+    headers = req.headers
     if check_jwt_token(headers=headers):
-        return "You do not have access", 404
+        return HttpResponse("You do not have access", status=404)
 
-    data = request.get_json(force=True)
+    data = req.GET
     required_fields = ['in', 'out']
 
     for field in required_fields:
         if not data.get(field):
-            return "Invalid transaction data", 404
+            return HttpResponse("Invalid transaction data", status=404)
 
     # data['timestamp'] = time.time()
 
     blockchain.add_new_transaction(data)
 
-    return "Success", 201
+    return HttpResponse("Success", status=201)
 
 
-@app.route('/mine', methods=['GET'])
-def mine_unconfirmed_transactions():
+# @app.route('/mine', methods=['GET'])
+def mine_unconfirmed_transactions(req):
     result = blockchain.mine()
     if not result:
-        return "No transaction to mine"
+        return HttpResponse("No transaction to mine")
     else:
         chain_length = len(blockchain.chain)
         consensus()
         if chain_length == len(blockchain.chain):
             announce_new_block(block=blockchain.last_block)
-    return "Block #{} is mined".format(result)
+    return HttpResponse("Block #{} is mined".format(result))
 
 
-@app.route('/pending_tx')
-def get_pending_tx():
-    return json.dumps(blockchain.unconfirmed_transactions)
+# @app.route('/pending_tx')
+def get_pending_tx(req):
+    return HttpResponse(json.dumps(blockchain.unconfirmed_transactions))
 
 
 def consensus():
@@ -291,20 +276,20 @@ def consensus():
 
 
 # add block not passed add to unconfirmed transaction step
-@app.route('/add_block', methods=['POST'])
-def verify_and_add_block():
-    headers = request.headers
+# @app.route('/add_block', methods=['POST'])
+def verify_and_add_block(req):
+    headers = req.headers
     if not check_jwt_token(headers=headers):
         print('You do not have access')
-        return "You do not have access", 404
+        return HttpResponse("You do not have access", status=404)
 
-    transaction_data = request.get_json(force=True)
+    transaction_data = req.POST
     required_fields = ['in', 'out']
 
     for field in required_fields:
         if not transaction_data.get(field):
             print('Invalid transaction data')
-            return "Invalid transaction data", 404
+            return HttpResponse("Invalid transaction data", status=404)
 
     the_last_block = blockchain.last_block
     transactions = []
@@ -317,9 +302,9 @@ def verify_and_add_block():
     added = blockchain.add_block_to_blockchain(block=block, proof=proof)
     if not added:
         print('The block was discarded by the node')
-        return "The block was discarded by the node", 404
+        return HttpResponse("The block was discarded by the node", status=404)
 
-    return "The block added to the chain", 201
+    return HttpResponse("The block added to the chain", status=201)
 
 
 def announce_new_block(block):

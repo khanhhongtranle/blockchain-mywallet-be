@@ -2,6 +2,7 @@ import time
 from hashlib import sha256
 import uuid
 
+
 class InputTransaction:
     def __init__(self, receiver_address, sender_address, amount):
         self.receiver_address = receiver_address
@@ -16,6 +17,7 @@ class InputTransaction:
 
     def get_amount(self):
         return self.amount
+
 
 class OutputTransaction:
     def __init__(self, sender_address, receiver_address, amount):
@@ -32,6 +34,7 @@ class OutputTransaction:
     def get_amount(self):
         return self.amount
 
+
 class Transaction:
     def __init__(self, id, input_transaction: InputTransaction, output_transaction: OutputTransaction):
         self.id = id
@@ -46,6 +49,7 @@ class Transaction:
 
     def get_out_transaction(self):
         return self.output_transaction
+
 
 class Block:
     def __init__(self, index, transactions, timestamp, previous_hash):
@@ -66,6 +70,7 @@ class Block:
         if block_hash == self.compute_hash() and block_hash.startswith('0' * difficulty):
             result = True
         return result
+
 
 class BlockChain:
     difficulty = 2
@@ -157,4 +162,3 @@ class BlockChain:
             previous_hash = block_hash
 
         return result
-
