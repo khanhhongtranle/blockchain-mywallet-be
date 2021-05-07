@@ -10,5 +10,6 @@ urlpatterns = [
     path('new_transaction',views.new_transaction),
     path('mine',views.mine_unconfirmed_transactions),
     path('pending_tx',views.get_pending_tx),
-    path('add_block',views.verify_and_add_block)
+    path('add_block',views.verify_and_add_block),
+    path('amount',views.get_amount)
 ]

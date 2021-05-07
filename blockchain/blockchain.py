@@ -75,32 +75,20 @@ class BlockChain:
     difficulty = 1
 
     def __init__(self):
-        self.__chain = []  # keeps all blocks
+        self.chain = []  # keeps all blocks
         self.unconfirmed_transactions = []  # keeps all unconfirmned transactions
         self.__create_genesis_block()
-
-    @property
-    def chain(self):
-        return self.__chain
-
-    @chain.setter
-    def chain(self, new_chain):
-        self.__chain = new_chain
-
-    @chain.getter
-    def chain(self):
-        return self.__chain
 
     def __create_genesis_block(self):
         genesis_block = Block(index=0, transactions=[], timestamp=time.time(), previous_hash="0")
         self.__append_to_chain(genesis_block)
 
     def __append_to_chain(self, new_block):
-        self.__chain.append(new_block)
+        self.chain.append(new_block)
 
     @property
     def last_block(self):
-        return self.__chain[-1]
+        return self.chain[-1]
 
     def proof_of_work(self, block):
         block.nonce = 0

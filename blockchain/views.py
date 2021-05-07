@@ -46,7 +46,7 @@ def write_wallet_into_db(password, private_key, public_key):
         'password': hash_password(password=password, salt=salt),
         'private_key': private_key,
         'public_key': public_key,
-        'salt': salt
+        'salt': salt.decode('utf-8')
     })
 
 
@@ -62,25 +62,26 @@ def check_jwt_token(headers):
         return True
     return False
 
+
 # Access to wallet
 def access_my_wallet(req):
     request_data = json.loads(req.body.decode('utf-8'))
     req_password = str(request_data['password'])
     req_private_key = str(request_data['private_key'])
-    hashed_password = hash_password(password=req_password, salt=salt)
-    found_wallet_data = db.wallet.find_one({'$and': [{'private_key': req_private_key}, {'password': hashed_password}]})
-    if found_wallet_data:
+    found_wallet_by_private_key = db.wallet.find_one({'private_key': req_private_key})
+    hashed_password = hash_password(password=req_password, salt=found_wallet_by_private_key['salt'])
+    if found_wallet_by_private_key and hashed_password == found_wallet_by_private_key['password']:
         # Create jwt token by HS256
         encode_token = jwt.encode({
-            'public_key': found_wallet_data['public_key'],
-            'private_key': found_wallet_data['private_key']
+            'public_key': found_wallet_by_private_key['public_key'],
+            'private_key': found_wallet_by_private_key['private_key']
         },
             'secret',
             algorithm='HS256')
         response_body = {
             'message': 'Success',
             'data': {
-                'public_key': found_wallet_data['public_key'],
+                'public_key': found_wallet_by_private_key['public_key'],
                 'jwt_token': encode_token
             }
         }
@@ -271,7 +272,7 @@ def verify_and_add_block(req):
     added = blockchain.add_block_to_blockchain(block=block, proof=proof)
     if not added:
         print('The block was discarded by the node')
-        return HttpResponse("The block was discarded by the node", status=404)
+        return HttpResponse("The block was discarded by the node", status=200)
 
     return HttpResponse("The block added to the chain", status=201)
 
@@ -280,3 +281,30 @@ def announce_new_block(block):
     for node in peers:
         url = "{}add_block".format(peers)
         requests.post(url, data=json.dumps(block.__dict__, sort_keys=True))
+
+
+def get_amount(req):
+    headers = req.headers
+    if not check_jwt_token(headers=headers):
+        print('You do not have access')
+        return HttpResponse("You do not have access", status=404)
+
+    req_data = json.loads(req.body.decode('utf-8'))
+    req_address = req_data['address']
+    amount = 0
+    for block_index in range(len(blockchain.chain)):
+        block = blockchain.chain[block_index]
+        for transaction_index in range(len(block.transactions)):
+            transaction = block.transactions[transaction_index]
+            if transaction.input_transaction.get_receiver_address() == req_address:
+                amount += transaction.input_transaction.get_amount()
+            if transaction.output_transaction.get_sender_address() == req_address:
+                amount -= transaction.output_transaction.get_amount()
+
+    response_body = {
+        'message': 'Success',
+        'data': {
+            'amount': amount
+        }
+    }
+    return HttpResponse(json.dumps(response_body), status=201)
