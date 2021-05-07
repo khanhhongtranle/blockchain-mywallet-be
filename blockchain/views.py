@@ -1,5 +1,5 @@
 from django.http import HttpResponse
-
+import bcrypt
 import base64
 import time
 import uuid
@@ -14,15 +14,23 @@ db = client.myDatabase
 
 
 # Hash password
-def hash_password(password, salt):
+def hash_password(password):
     # Hash password
-    key = hashlib.pbkdf2_hmac(
-        'sha256',  # The hash digest algorithm for HMAC
-        password.encode('utf-8'),  # Convert the password to bytes
-        salt,  # Provide the salt
-        100000  # It is recommended to use at least 100,000 iterations of SHA-256
-    )
-    return key.hex()
+    # key = hashlib.pbkdf2_hmac(
+    #     'sha256',  # The hash digest algorithm for HMAC
+    #     password.encode('utf-8'),  # Convert the password to bytes
+    #     salt,  # Provide the salt
+    #     100000  # It is recommended to use at least 100,000 iterations of SHA-256
+    # )
+    # key = hash(password+salt)
+    password = password.encode()
+    key = bcrypt.hashpw(password=password, salt=bcrypt.gensalt())
+    return key
+
+
+def check_password(password_plain_text, hashed_password):
+    password_plain_text = password_plain_text.encode()
+    return bcrypt.checkpw(password=password_plain_text, hashed_password=hashed_password)
 
 
 # Generate private key & public key by ECDSA key
@@ -43,10 +51,9 @@ def generate_ecdsa_key():
 # Database MongoDb
 def write_wallet_into_db(password, private_key, public_key):
     db.wallet.insert_one({
-        'password': hash_password(password=password, salt=salt),
+        'password': hash_password(password=password),
         'private_key': private_key,
         'public_key': public_key,
-        'salt': salt.decode('utf-8')
     })
 
 
@@ -69,8 +76,8 @@ def access_my_wallet(req):
     req_password = str(request_data['password'])
     req_private_key = str(request_data['private_key'])
     found_wallet_by_private_key = db.wallet.find_one({'private_key': req_private_key})
-    hashed_password = hash_password(password=req_password, salt=found_wallet_by_private_key['salt'])
-    if found_wallet_by_private_key and hashed_password == found_wallet_by_private_key['password']:
+    hashed_password = hash_password(password=req_password)
+    if found_wallet_by_private_key and check_password(password_plain_text=req_password, hashed_password=hashed_password):
         # Create jwt token by HS256
         encode_token = jwt.encode({
             'public_key': found_wallet_by_private_key['public_key'],
