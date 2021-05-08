@@ -12,5 +12,6 @@ urlpatterns = [
     path('pending_tx',views.get_pending_tx),
     path('add_block',views.verify_and_add_block), # used
     path('amount',views.get_amount), # used
-    path('unspent_transactions', views.get_pending_tx)
+    path('unspent_transactions', views.get_pending_tx), # used
+    path('confirmed_transactions', views.get_confirmed_tx) # used
 ]

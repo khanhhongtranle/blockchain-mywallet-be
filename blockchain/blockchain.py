@@ -37,6 +37,7 @@ class OutputTransaction:
 
 class Transaction:
     def __init__(self, id, input_transaction: InputTransaction, output_transaction: OutputTransaction, timestamp):
+        self.confirmed_timestamp = None
         self.id = id
         self.input_transaction = input_transaction
         self.output_transaction = output_transaction
@@ -57,17 +58,24 @@ class Transaction:
     def get_timestamp(self):
         return self.timestamp
 
+    def set_confirmed_timestamp(self, value):
+        self.confirmed_timestamp = value
+
+    def get_confirmed_timestamp(self):
+        return self.confirmed_timestamp
+
     def toJSON(self):
         return json.dumps(self, default=lambda o: o.__dict__,sort_keys=True, indent=4)
 
 class Block:
-    def __init__(self, index, transactions, timestamp, previous_hash):
+    def __init__(self, index, transactions, timestamp, previous_hash, miner):
         self.nonce = 0
         self.index = index
         self.transactions = transactions
         self.timestamp = timestamp
         self.previous_hash = previous_hash
         self.hash = self.compute_hash()
+        self.miner = miner
 
     def compute_hash(self):
         block_string = json.dumps(str(self.nonce)+str(self.index)+str(self.transactions)+str(self.timestamp)+str(self.previous_hash), sort_keys=True)
@@ -89,7 +97,7 @@ class BlockChain:
         self.__create_genesis_block()
 
     def __create_genesis_block(self):
-        genesis_block = Block(index=0, transactions=[], timestamp=time.time(), previous_hash="0")
+        genesis_block = Block(index=0, transactions=[], timestamp=time.time(), previous_hash="0", miner=None)
         self.__append_to_chain(genesis_block)
 
     def __append_to_chain(self, new_block):
@@ -119,6 +127,11 @@ class BlockChain:
 
         block.hash = proof
 
+        # set confirmed time for transactions
+        for tx_index in range(len(block.transactions)):
+            tx = block.transactions[tx_index]
+            tx.set_confirmed_timestamp(time.time())
+
         self.__append_to_chain(block)
         return True
 
@@ -129,13 +142,13 @@ class BlockChain:
         transaction = Transaction(id=str(id_value), input_transaction=in_transaction, output_transaction=out_transaction, timestamp=time.time())
         self.unconfirmed_transactions.append(transaction)
 
-    def mine(self):
+    def mine(self, miner):
         if not self.unconfirmed_transactions:
             return False
 
         last_block = self.last_block
 
-        new_block = Block(index=last_block.index + 1, transactions=self.unconfirmed_transactions, timestamp=time.time(), previous_hash=last_block.hash)
+        new_block = Block(index=last_block.index + 1, transactions=self.unconfirmed_transactions, timestamp=time.time(), previous_hash=last_block.hash, miner=miner)
 
         proof = self.proof_of_work(new_block)
 

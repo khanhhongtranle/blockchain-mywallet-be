@@ -184,15 +184,18 @@ def create_chain_from_dump(chain_dump):
 # @app.route('/chains', methods=['GET'])
 def get_chain(req):
     headers = req.headers
-    if check_jwt_token(headers=headers):
+    if not check_jwt_token(headers=headers):
         return HttpResponse("You do not have access", status=404)
     chain_data = []
     for block in blockchain.chain:
-        chain_data.append(block.__dict__)
-    return HttpResponse(json.dumps({
-        'length': len(chain_data),
-        'chain': chain_data
-    }))
+        element = {
+            'index': block.index,
+            'timestamp' : block.timestamp,
+            'miner' : block.miner,
+            'num_of_tx': len(block.transactions),
+        }
+        chain_data.append(element)
+    return HttpResponse(json.dumps(chain_data), 200)
 
 
 # @app.route('/new_transaction', methods=['POST'])
@@ -228,7 +231,13 @@ def new_transaction(req):
 
 # @app.route('/mine', methods=['GET'])
 def mine_unconfirmed_transactions(req):
-    result = blockchain.mine()
+    headers = req.headers
+    if not check_jwt_token(headers=headers):
+        return HttpResponse("You do not have access", status=404)
+
+    data = json.loads(req.body.decode('utf-8'))
+
+    result = blockchain.mine(data['miner'])
     if not result:
         return HttpResponse("No transaction to mine")
     else:
@@ -264,6 +273,37 @@ def get_pending_tx(req):
             'timestamp': tx.get_timestamp()
         }
         result.append(element)
+
+    return HttpResponse(json.dumps(result), 200)
+
+
+def get_confirmed_tx(req):
+    headers = req.headers
+    if not check_jwt_token(headers=headers):
+        return HttpResponse("You do not have access", status=404)
+
+    result = []
+    # result = {
+    #       {
+    #           sender_address: ,
+    #           receiver_address: ,
+    #           amount: ,
+    #       }
+    # }
+    for index in range(len(blockchain.chain)):
+        block = blockchain.chain[index]
+        for tx_index in range(len(block.transactions)):
+            tx = block.transactions[tx_index]
+            tx_out = tx.get_out_transaction()
+            element = {
+                'sender_address': tx_out.get_sender_address(),
+                'receiver_address': tx_out.get_receiver_address(),
+                'amount': tx_out.get_amount(),
+                'id': str(tx.get_id()),
+                'timestamp': tx.get_timestamp(),
+                'confirmed_timestamp': tx.get_confirmed_timestamp()
+            }
+            result.append(element)
 
     return HttpResponse(json.dumps(result), 200)
 
@@ -309,7 +349,7 @@ def verify_and_add_block(req):
     out_transaction = OutputTransaction(sender_address=transaction_data['out']['sender_address'], receiver_address=transaction_data['out']['receiver_address'], amount=transaction_data['out']['amount'])
     transaction = Transaction(id=uuid.uuid4(), input_transaction=in_transaction, output_transaction=out_transaction, timestamp=time.time())
     transactions.append(transaction)
-    block = Block(index=the_last_block.index + 1, transactions=transactions, timestamp=time.time(), previous_hash=the_last_block.hash)
+    block = Block(index=the_last_block.index + 1, transactions=transactions, timestamp=time.time(), previous_hash=the_last_block.hash, miner='TLKH')
     proof = blockchain.proof_of_work(block)
     added = blockchain.add_block_to_blockchain(block=block, proof=proof)
     if not added:
