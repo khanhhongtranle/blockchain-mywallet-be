@@ -36,10 +36,11 @@ class OutputTransaction:
 
 
 class Transaction:
-    def __init__(self, id, input_transaction: InputTransaction, output_transaction: OutputTransaction):
+    def __init__(self, id, input_transaction: InputTransaction, output_transaction: OutputTransaction, timestamp):
         self.id = id
         self.input_transaction = input_transaction
         self.output_transaction = output_transaction
+        self.timestamp = timestamp
 
     def get_transaction_id(self):
         return self.id
@@ -50,6 +51,14 @@ class Transaction:
     def get_out_transaction(self):
         return self.output_transaction
 
+    def get_id(self):
+        return self.id
+
+    def get_timestamp(self):
+        return self.timestamp
+
+    def toJSON(self):
+        return json.dumps(self, default=lambda o: o.__dict__,sort_keys=True, indent=4)
 
 class Block:
     def __init__(self, index, transactions, timestamp, previous_hash):
@@ -116,7 +125,8 @@ class BlockChain:
     def add_new_transaction(self, transaction_dumps):
         in_transaction = InputTransaction(receiver_address=transaction_dumps['in']['receiver_address'], sender_address=transaction_dumps['in']['sender_address'], amount=transaction_dumps['in']['amount'])
         out_transaction = OutputTransaction(sender_address=transaction_dumps['out']['sender_address'], receiver_address=transaction_dumps['out']['receiver_address'], amount=transaction_dumps['out']['amount'])
-        transaction = Transaction(id=uuid.uuid4(), input_transaction=in_transaction, output_transaction=out_transaction)
+        id_value = uuid.uuid4()
+        transaction = Transaction(id=str(id_value), input_transaction=in_transaction, output_transaction=out_transaction, timestamp=time.time())
         self.unconfirmed_transactions.append(transaction)
 
     def mine(self):
@@ -149,3 +159,15 @@ class BlockChain:
             previous_hash = block_hash
 
         return result
+
+    def get_amount(self, address):
+        amount = 0
+        for block_index in range(len(self.chain)):
+            block = self.chain[block_index]
+            for transaction_index in range(len(block.transactions)):
+                transaction = block.transactions[transaction_index]
+                if transaction.input_transaction.get_receiver_address() == address:
+                    amount += transaction.input_transaction.get_amount()
+                if transaction.output_transaction.get_sender_address() == address:
+                    amount -= transaction.output_transaction.get_amount()
+        return amount

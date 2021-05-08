@@ -198,17 +198,28 @@ def get_chain(req):
 # @app.route('/new_transaction', methods=['POST'])
 def new_transaction(req):
     headers = req.headers
-    if check_jwt_token(headers=headers):
+    if not check_jwt_token(headers=headers):
         return HttpResponse("You do not have access", status=404)
 
-    data = req.GET
+    data = json.loads(req.body.decode('utf-8'))
     required_fields = ['in', 'out']
 
     for field in required_fields:
         if not data.get(field):
             return HttpResponse("Invalid transaction data", status=404)
 
-    # data['timestamp'] = time.time()
+    # Check unspent amount
+    unspent_amount = blockchain.get_amount(data['out']['sender_address'])
+    needed_amount = data['out']['amount']
+    if needed_amount > unspent_amount:
+        response_body = {
+            'message': 'Not enough coins to send this transaction',
+            'data': {
+                'unspent_amount': unspent_amount,
+                'needed_amount': needed_amount
+            }
+        }
+        return HttpResponse(json.dumps(response_body), status=200)
 
     blockchain.add_new_transaction(data)
 
@@ -230,7 +241,31 @@ def mine_unconfirmed_transactions(req):
 
 # @app.route('/pending_tx')
 def get_pending_tx(req):
-    return HttpResponse(json.dumps(blockchain.unconfirmed_transactions))
+    headers = req.headers
+    if not check_jwt_token(headers=headers):
+        return HttpResponse("You do not have access", status=404)
+
+    result = []
+    # result = {
+    #       {
+    #           sender_address: ,
+    #           receiver_address: ,
+    #           amount: ,
+    #       }
+    # }
+    for index in range(len(blockchain.unconfirmed_transactions)):
+        tx = blockchain.unconfirmed_transactions[index]
+        tx_out = tx.get_out_transaction()
+        element = {
+            'sender_address': tx_out.get_sender_address(),
+            'receiver_address': tx_out.get_receiver_address(),
+            'amount': tx_out.get_amount(),
+            'id': tx.get_id(),
+            'timestamp': tx.get_timestamp()
+        }
+        result.append(element)
+
+    return HttpResponse(json.dumps(result), 200)
 
 
 def consensus():
@@ -272,7 +307,7 @@ def verify_and_add_block(req):
     transactions = []
     in_transaction = InputTransaction(receiver_address=transaction_data['in']['receiver_address'], sender_address=transaction_data['in']['sender_address'], amount=transaction_data['in']['amount'])
     out_transaction = OutputTransaction(sender_address=transaction_data['out']['sender_address'], receiver_address=transaction_data['out']['receiver_address'], amount=transaction_data['out']['amount'])
-    transaction = Transaction(id=uuid.uuid4(), input_transaction=in_transaction, output_transaction=out_transaction)
+    transaction = Transaction(id=uuid.uuid4(), input_transaction=in_transaction, output_transaction=out_transaction, timestamp=time.time())
     transactions.append(transaction)
     block = Block(index=the_last_block.index + 1, transactions=transactions, timestamp=time.time(), previous_hash=the_last_block.hash)
     proof = blockchain.proof_of_work(block)
@@ -298,15 +333,7 @@ def get_amount(req):
 
     req_data = json.loads(req.body.decode('utf-8'))
     req_address = req_data['address']
-    amount = 0
-    for block_index in range(len(blockchain.chain)):
-        block = blockchain.chain[block_index]
-        for transaction_index in range(len(block.transactions)):
-            transaction = block.transactions[transaction_index]
-            if transaction.input_transaction.get_receiver_address() == req_address:
-                amount += transaction.input_transaction.get_amount()
-            if transaction.output_transaction.get_sender_address() == req_address:
-                amount -= transaction.output_transaction.get_amount()
+    amount = blockchain.get_amount(req_address)
 
     response_body = {
         'message': 'Success',
