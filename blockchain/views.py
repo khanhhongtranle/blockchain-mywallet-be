@@ -3,7 +3,7 @@ import bcrypt
 import base64
 import time
 import uuid
-
+import socketio
 from .blockchain import Block, InputTransaction, OutputTransaction, Transaction, BlockChain
 import json, pymongo, os, hashlib, ecdsa, jwt, requests
 
@@ -11,6 +11,49 @@ salt = os.urandom(32)  # Salt for hash password to write into db
 
 client = pymongo.MongoClient("localhost", 27017)
 db = client.myDatabase
+
+# Socker IO
+sio = socketio.Server(cors_allowed_origins='*')
+app = socketio.WSGIApp(sio)
+
+
+@sio.event
+async def client_connect(sid, data):
+    sio.emit('sever.connect', 'Connected.')
+
+
+# has a new block added to block chain
+def socket_emit_blockchain_has_changed(block, transactions_arr):
+    lastest_block = {
+        'index': block.index,
+        'timestamp': block.timestamp,
+        'miner': block.miner,
+        'num_of_tx': len(block.transactions),
+    }
+
+    lastest_transactions = []
+    for tx_index in range(len(transactions_arr)):
+        tx = transactions_arr[tx_index]
+        a_transaction = {
+            'sender_address': tx.get_out_transaction().get_sender_address(),
+            'receiver_address': tx.get_out_transaction().get_receiver_address(),
+            'amount': tx.get_out_transaction().get_amount(),
+            'id': str(tx.get_transaction_id()),
+            'timestamp': tx.get_timestamp(),
+            'confirmed_timestamp': tx.get_confirmed_timestamp()
+        }
+        lastest_transactions.append(a_transaction)
+
+    sio.emit('blockchain.update', json.dumps({'lastest_block': lastest_block, 'lastest_transactions': lastest_transactions}))
+
+
+def socket_emit_bought_coin(amount, address):
+    sio.emit('amount.update', {'amount': amount, 'address': address})
+
+
+# new transaction that is unconfimed transaction
+def socket_emit_new_transaction(new_tx):
+    sio.emit('transaction.update', new_tx)
 
 
 # Hash password
@@ -190,8 +233,8 @@ def get_chain(req):
     for block in blockchain.chain:
         element = {
             'index': block.index,
-            'timestamp' : block.timestamp,
-            'miner' : block.miner,
+            'timestamp': block.timestamp,
+            'miner': block.miner,
             'num_of_tx': len(block.transactions),
         }
         chain_data.append(element)
@@ -226,6 +269,16 @@ def new_transaction(req):
 
     blockchain.add_new_transaction(data)
 
+    newest_tx = blockchain.last_unconfirmed_tx
+    newest_tx_data = {
+        'sender_address': newest_tx.get_out_transaction().get_sender_address(),
+        'receiver_address': newest_tx.get_out_transaction().get_receiver_address(),
+        'amount': newest_tx.get_out_transaction().get_amount(),
+        'id': newest_tx.get_transaction_id(),
+        'timestamp': newest_tx.get_timestamp()
+    }
+    socket_emit_new_transaction(new_tx=newest_tx_data)
+
     return HttpResponse("Success", status=201)
 
 
@@ -237,6 +290,8 @@ def mine_unconfirmed_transactions(req):
 
     data = json.loads(req.body.decode('utf-8'))
 
+    unconfirmed_tx = blockchain.unconfirmed_transactions
+
     result = blockchain.mine(data['miner'])
     if not result:
         return HttpResponse("No transaction to mine")
@@ -245,6 +300,8 @@ def mine_unconfirmed_transactions(req):
         consensus()
         if chain_length == len(blockchain.chain):
             announce_new_block(block=blockchain.last_block)
+
+    socket_emit_blockchain_has_changed(block=blockchain.last_block, transactions_arr=unconfirmed_tx)
     return HttpResponse("Block #{} is mined".format(result))
 
 
@@ -356,6 +413,8 @@ def verify_and_add_block(req):
         print('The block was discarded by the node')
         return HttpResponse("The block was discarded by the node", status=200)
 
+    socket_emit_bought_coin(transaction_data['in']['amount'], transaction_data['in']['receiver_address'])
+    socket_emit_blockchain_has_changed(block=blockchain.last_block, transactions_arr=transactions)
     return HttpResponse("The block added to the chain", status=201)
 
 

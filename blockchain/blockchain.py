@@ -184,3 +184,7 @@ class BlockChain:
                 if transaction.output_transaction.get_sender_address() == address:
                     amount -= transaction.output_transaction.get_amount()
         return amount
+
+    @property
+    def last_unconfirmed_tx(self):
+        return self.unconfirmed_transactions[-1]

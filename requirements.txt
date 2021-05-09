@@ -5,3 +5,4 @@ pymongo~=3.11.3
 ecdsa~=0.16.1
 PyJWT~=2.1.0
 requests~=2.25.1
+python-socketio

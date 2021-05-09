@@ -14,3 +14,9 @@ from django.core.wsgi import get_wsgi_application
 os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'djangoProject.settings')
 
 application = get_wsgi_application()
+
+from blockchain.views import sio
+import socketio, eventlet.wsgi
+
+application = socketio.WSGIApp(sio, application)
+eventlet.wsgi.server(eventlet.listen(('', 8000)), application)
